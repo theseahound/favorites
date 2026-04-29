@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>URL Launcher</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    textarea { width: 100%; height: 100px; margin-bottom: 10px; }
+    .section { margin-bottom: 30px; }
+    button { margin-right: 10px; }
+
+    /* Tab styles */
+    #tabsContainer {
+      display: flex;
+      border-bottom: 2px solid #ccc;
+      margin-bottom: 20px;
+    }
+    #tabsContainer button {
+      background: #fff;
+      border: none;
+      outline: none;
+      padding: 10px 24px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+      font-size: 16px;
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+      margin-right: 2px;
+      border-bottom: 2px solid transparent;
+    }
+    #tabsContainer button.active {
+      background: #f1f1f1;
+      color: #0078d7;
+      border-bottom: 2px solid #0078d7;
+      font-weight: bold;
+      z-index: 1;
+    }
+    #tabsContainer button:not(.active):hover {
+      background: #e0e0e0;
+    }
+    #importFile { display: none; }
+  </style>
+</head>
+<body>
+  <h1>URL Launcher</h1>
+
+
+
+  <div id="tabsContainer"></div>
+  <div id="sectionsContainer"></div>
+
+  <hr>
+  <button onclick="exportJSON()">Export JSON</button>
+  <button onclick="triggerImport()">Import JSON</button>
+  <button onclick="clearAll()">Clear</button>
+  <input type="file" id="importFile" accept=".json" onchange="importJSON(event)">
+
+
+
+  <script>
+
+    // Configurable tabs and categories
+    const tabsConfig = [
+      { name: 'News', categories: ['Electronics', 'Emulation & Retro', 'Gaming', 'Additional Sources'] },
+      { name: 'Video', categories: ['VR', 'Games', 'Asia', 'Business', 'Other'] },
+      { name: 'Motorbike', categories: ['Moto-News', 'Moto-Sills', 'Moto-Gear'] }
+    ];
+    const url_config = 'https://api.github.com/repos/theseahound/config/contents/favorites.json';
+    // Collect all unique categories from tabsConfig
+    const categories = Array.from(new Set(tabsConfig.flatMap(tab => tab.categories)));
+
+    const tabsContainer = document.getElementById('tabsContainer');
+    const sectionsContainer = document.getElementById('sectionsContainer');
+    const fields = {};
+
+    // Render tab buttons
+    let currentTabIdx = 0;
+    function renderTabs() {
+      tabsContainer.innerHTML = '';
+      tabsConfig.forEach((tab, idx) => {
+        const btn = document.createElement('button');
+        btn.textContent = tab.name;
+        btn.className = idx === currentTabIdx ? 'active' : '';
+        btn.onclick = () => {
+          currentTabIdx = idx;
+          renderSections();
+          renderTabs();
+        };
+        tabsContainer.appendChild(btn);
+      });
+    }
+
+    // Render all textareas for all categories once, and show/hide based on tab
+    categories.forEach(cat => {
+      const section = document.createElement('div');
+      section.className = 'section';
+      section.dataset.cat = cat;
+      section.innerHTML = `
+        <h3>${cat}</h3>
+        <textarea id="${cat.replace(/[^a-z0-9]/gi, '').toLowerCase()}"></textarea><br>
+        <button onclick="openLinks('${cat}')">Open</button>
+      `;
+      const textarea = section.querySelector('textarea');
+      // REMOVED: textarea.addEventListener('input', saveToLocalStorage);
+      fields[cat] = textarea;
+      sectionsContainer.appendChild(section);
+    });
+
+    function renderSections() {
+      // Show only the sections for the current tab
+      const tabCats = tabsConfig[currentTabIdx].categories;
+      categories.forEach(cat => {
+        const section = Array.from(sectionsContainer.children).find(div => div.dataset.cat === cat);
+        if (tabCats.includes(cat)) {
+          section.style.display = '';
+        } else {
+          section.style.display = 'none';
+        }
+      });
+    }
+
+    renderTabs();
+    renderSections();
+
+    function getDataFromFields() {
+      const data = {};
+      categories.forEach(cat => {
+        data[cat] = fields[cat].value.trim().split('\n').filter(Boolean);
+      });
+      return data;
+    }
+
+    function populateFields(data) {
+      categories.forEach(cat => {
+        fields[cat].value = (data[cat] || []).join('\n');
+      });
+      renderSections();
+    }
+
+function openLinks(category) {
+  const urls = getDataFromFields()[category];
+
+  urls.forEach(url => {
+    const validUrl = url.startsWith('http') ? url : 'https://' + url;
+    const a = document.createElement('a');
+    a.href = validUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.click();
+  });
+}
+
+    function exportJSON() {
+      const data = getDataFromFields();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'favorites.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function triggerImport() {
+      document.getElementById('importFile').click();
+    }
+
+    function importJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = JSON.parse(e.target.result);
+          // REMOVED: localStorage.clear();
+          populateFields(data);
+          // REMOVED: localStorage.setItem('urlData', JSON.stringify(data));
+        } catch (err) {
+          alert('Invalid JSON file.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // OBSOLETE: No longer used - data loaded from GitHub
+    function saveToLocalStorage() {
+      const data = getDataFromFields();
+      localStorage.setItem('urlData', JSON.stringify(data));
+    }
+
+    // OBSOLETE: No longer used - data loaded from GitHub
+    function loadFromLocalStorage() {
+      const stored = localStorage.getItem('urlData');
+      if (stored) {
+        try {
+          const data = JSON.parse(stored);
+          populateFields(data);
+        } catch {
+          console.warn('Corrupted localStorage data.');
+        }
+      }
+    }
+
+
+
+    window.onload = async () => {
+  const config = await loadConfig();
+  if (config) {
+    populateFields(config);
+  }
+};
+
+    function clearAll() {
+      // REMOVED: localStorage.clear();
+      categories.forEach(cat => {
+        fields[cat].value = '';
+      });
+      renderSections();
+    }
+
+    async function loadConfig() {
+
+      let token = localStorage.getItem('gh_token');
+
+      if (!token) {
+        const input = prompt("Enter GitHub Access Token:");
+
+        if (input) {
+          localStorage.setItem('gh_token', input);
+          token = input;
+        } else return;
+      }
+
+      try {
+        const response = await fetch(url_config, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.v3.raw'
+          }
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          // The token is there, but GitHub rejected it.
+          const newToken = prompt("Access Denied. Token may be invalid or expired. Enter a new token to update it (or leave blank to retry later):");
+
+          if (newToken) {
+            localStorage.setItem('gh_token', newToken);
+            location.reload(); // Refresh to try again with the new key
+          }
+          return;
+        }
+
+        if (!response.ok) {
+          console.error(`Error: ${response.status}`);
+          return;
+        }
+
+        const config = await response.json();
+        console.log("Config loaded successfully.");
+        return config;
+
+      } catch (err) {
+        console.error("Network error:", err);
+      }
+    }
+  </script>
+</body>
+</html>
